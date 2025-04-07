@@ -1,0 +1,221 @@
+parameters:
+    demand: null
+    pv_size: null
+    pv_param: null
+    pv_enable: False
+    ev_enable: False
+    ev_available: null
+    ev_distance_param: null
+    bat_enable: False
+    ev_capacity: null
+    ev_consumption: null
+    heat_enable: False
+    heat_lb: null
+    heat_ub: null
+    power_to_c: null
+    q_tot: null
+    heat_technology: null
+    water_capacity: null
+    water_technology: null
+    water_vol: null
+    water_tot: null
+    heat_capacity: null
+    
+config:
+  optimization:
+    # problem_type: MILP
+    problem_type: LP
+    snapshots:
+      count: 35040  # 15-Minuten-Intervalle in einem Jahr
+      # count: 96  # 15-Minuten-Intervalle in einem Tag
+      weights: 0.25 # Duration of each time step in hours (for 15 min steps)
+    solver:
+      name: highs
+      log: false
+
+  results:
+    enabled: true
+    memory_only: false
+
+  paths:
+    files: files/
+    templates: templates/
+    results: results/
+    components: files/
+    addons: addons/
+
+# files with yearly data (also change count)
+  files:
+    consumption: yearly_consumption.csv
+    pv: pv_generation.csv
+    ev_availability: yearly_availability_data.csv
+    ev_distance: ev_driven_distance.csv
+    el_price: yearly_el_prices_kwh.csv
+    heat: heat_summary.csv # COP_ASHP_floor, COP_ASHP_radiator, COP_ASHP_water, COP_GSHP_floor, COP_GSHP_radiator, COP_GSHP_water, COP_WSHP_floor, COP_WSHP_radiator, space_SFH_kW/kWh, water_SFH_kW/kWh
+    grid_tariff_data: grid_tariff_data.csv
+
+carriers:
+  electricity: {}
+  heat: {}
+
+#*******************************************************************************************************************************************************************
+
+components:
+
+  grid_load:
+    type: Profile
+    mode: ranged
+    ub: 10
+    lb: 0
+    node_to: connection_point
+    # cost: dap_eur_kwh@el_price
+    # cost: grid_tariff@grid_tariff_data + 0.2
+    cost:  0.312 # base on unsere wasserkraft und evn grid tariff
+    carrier: electricity
+
+  # expensive_load:
+  #   type: Profile
+  #   mode: ranged
+  #   node_to: connection_point
+  #   cost: 1000000
+  #   lb: 0
+  #   carrier: electricity
+
+  connection_point:
+    type: Node
+    carrier: electricity
+
+  demand:
+    type: Profile
+    carrier: electricity
+    node_from: connection_point
+    value: <demand>
+
+  # pv überschuss wird nicht berrücksichtig 
+  pv_node:
+    type: Node
+    carrier: electricity
+
+  pv_connection:
+    type: Connection
+    node_from: pv_node
+    node_to: connection_point
+    carrier: electricity
+    lb: 0
+    enabled: <pv_enable>
+
+  pv_surplus:
+    type: Profile
+    mode: destroy
+    cost: -0.07 # 0.07 EUR/kWh
+    node_from: pv_node
+    carrier: electricity
+    enabled: <pv_enable>
+
+  pv_generation:
+    type: Profile
+    carrier: electricity
+    node_to: pv_node
+    value: <pv_param>*<pv_size>
+    enabled: <pv_enable>
+
+  bat_connection:
+    type: Connection
+    node_from: connection_point
+    node_to: bat_node
+    carrier: electricity
+    ub: 3.5
+    lb: -3.5
+    cost: 0.025 # 0.025 EUR/kWh
+    enabled: <bat_enable>
+
+  bat_node:
+    type: Node
+    carrier: electricity
+    has_state: True
+    state_initial: 4
+    state_final: 4
+    state_cyclic: disabled
+    state_lb: 0
+    state_ub: 6.9
+    enabled: <bat_enable>
+
+  ev_unit:
+    type: Unit
+    inputs: {electricity: connection_point}
+    outputs: {electricity: ev_node}
+    conversion: 1 electricity -> 1 electricity
+    capacity: 11 in:electricity
+    # unit_commitment: binary #
+    # min_conversion: 0.42 #
+    availability_factor: <ev_available>
+    enabled: <ev_enable>
+
+  ev_node:
+    type: Node
+    carrier: electricity
+    has_state: True
+    state_cyclic: disabled
+    state_initial: 25
+    state_final: 25
+    state_lb: 0
+    state_ub: <ev_capacity> # depending on model capacity
+    enabled: <ev_enable>
+
+  ev_demand:
+    type: Profile
+    carrier: electricity
+    enabled: <ev_enable>
+    node_from: ev_node
+    value: <ev_distance_param>*<ev_consumption> #https://ev-database.org/de/pkw/1743/Tesla-Model-Y
+
+  heat_unit:
+    type: Unit
+    inputs: {electricity: connection_point}
+    outputs: {heat: heat_node}
+    conversion: 1 electricity -> <heat_technology> heat
+    capacity: <heat_capacity> in:electricity
+    enabled: <heat_enable>
+
+  heat_node:
+    type: Node
+    carrier: heat
+    has_state: True
+    state_cyclic: disabled
+    # state_initial: 100
+    state_lb: 0
+    state_ub: (<heat_ub>-<heat_lb>)/<power_to_c> # depending allowed room temperature range
+    enabled: <heat_enable>
+
+  heat_demand:
+    type: Profile
+    carrier: heat
+    node_from: heat_node
+    value: space_sfh@heat*<q_tot>
+    enabled: <heat_enable>
+
+  water_unit:
+    type: Unit
+    inputs: {electricity: connection_point}
+    outputs: {heat: water_node}
+    conversion: 1 electricity -> <water_technology> heat
+    capacity: <water_capacity> in:electricity
+    enabled: <heat_enable>
+
+  water_node:
+    type: Node
+    carrier: heat
+    has_state: True
+    state_cyclic: disabled
+    # state_initial: 100
+    state_lb: 0
+    state_ub: <water_vol> * 0.0116 #*0.001 *1.16 *10 # depending and calcolated water tank based on area of house (temp range 10K)
+    enabled: <heat_enable>
+
+  water_demand:
+    type: Profile
+    carrier: heat
+    node_from: water_node
+    value: water_sfh@heat*<water_tot>
+    enabled: <heat_enable>
+  
