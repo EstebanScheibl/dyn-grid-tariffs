@@ -25,7 +25,7 @@ parameters:
 config:
   general:
     name:
-      model: base_model
+      model: cap_sub_ext
       scenario: <name>
     version:
       core: 2.6.3
@@ -69,16 +69,6 @@ carriers:
 #*******************************************************************************************************************************************************************
 
 components:
-  # grid_load:
-  #   type: Profile
-  #   mode: ranged
-  #   ub: 10
-  #   lb: 0
-  #   node_to: connection_point
-  #   # cost: dap_eur_kwh@el_price
-  #   # cost: grid_tariff@grid_tariff_data + 0.2
-  #   cost:  0.317 # base on unsere wasserkraft und evn grid tariff
-  #   carrier: electricity
 
   el_market:
     type: Profile
@@ -91,14 +81,23 @@ components:
     type: Node
     carrier: electricity
 
-  grid_tariff:
+  grid_tariff_low:
+    type: Connection
+    node_from: public_grid
+    node_to: connection_point
+    lb: 0
+    ub: 7.5
+    carrier: electricity
+    cost: 0.09574
+
+  grid_tariff_high:
     type: Connection
     node_from: public_grid
     node_to: connection_point
     lb: 0
     ub: 10
     carrier: electricity
-    cost: 0.104
+    cost: 0.19148
 
   connection_point:
     type: Node

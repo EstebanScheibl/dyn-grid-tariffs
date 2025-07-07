@@ -21,15 +21,16 @@ parameters:
     water_tot: null
     heat_capacity: null
     name: null
-    
+
 config:
   general:
     name:
-      model: base_model
+      model: mpd-50_inc
       scenario: <name>
     version:
       core: 2.6.3
       python: 3.12.8
+      
   optimization:
     # problem_type: MILP
     problem_type: LP
@@ -61,10 +62,14 @@ config:
     ev_distance: ev_driven_distance.csv
     el_price: yearly_el_prices_kwh.csv
     heat: heat_summary.csv # COP_ASHP_floor, COP_ASHP_radiator, COP_ASHP_water, COP_GSHP_floor, COP_GSHP_radiator, COP_GSHP_water, COP_WSHP_floor, COP_WSHP_radiator, space_SFH_kW/kWh, water_SFH_kW/kWh
+    grid_tariff_data: grid_tariff_tou.csv
 
 carriers:
   electricity: {}
   heat: {}
+
+addons:
+  MeasuredPeak_50_inc: {}
 
 #*******************************************************************************************************************************************************************
 
@@ -84,7 +89,7 @@ components:
     type: Profile
     mode: create
     node_to: public_grid
-    cost: 0.214 # base on unsere wasserkraft und evn grid tariff
+    cost: 0.214 # base on unsere wasserkraft und evn electricity tariff
     carrier: electricity
 
   public_grid:
@@ -98,7 +103,7 @@ components:
     lb: 0
     ub: 10
     carrier: electricity
-    cost: 0.104
+    cost: 0.057 # 0.057 EUR/kWh
 
   connection_point:
     type: Node

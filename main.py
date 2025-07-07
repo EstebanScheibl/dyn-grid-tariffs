@@ -1,22 +1,16 @@
+# uv run main.py
 import pandas as pd
 import iesopt
-# When adding additional components ensure to filter it in the lambda filter.
-# Make sure summary file state is enabled and other not used components are disabled.
-#******************************************************************************************************************************************
-# Define the run name
-run_name = 'base_200hh'
 
 # Load the CSV file
 file_path = r"C:\Users\ScheiblS\Documents\Repositories\dyn-grid-tariffs\files\household_summary.csv"
 data = pd.read_csv(file_path)
 
-# Initialize variables to store timeseries data
-combined_timeseries = pd.DataFrame()  # DataFrame to store all timeseries data
-total_objective_value = 0  # To accumulate the sum of objective values
-snapshot_stored = False  # Flag to ensure the snapshot is stored only once
-
+# Set the starting index to resume the loop
+start_index = 150 # <----- start with 0
+endswith = len(data)  # Set to the length of the DataFrame
 # Iterate through rows to solve the model for each row
-for i in range(len(data)):  # Use len(data) to include all rows
+for i in range(start_index, endswith):  # Start from the specified index 
     # Extract parameters for the current row
     demand = data.iloc[i, 2]  # Column 2 (zero-based index for demand)
     pv_size = data.iloc[i, 8]  # Column 8 (PV size)
@@ -25,8 +19,7 @@ for i in range(len(data)):  # Use len(data) to include all rows
     ev_enable = bool(data.iloc[i, 3])  # Column 3 (Convert EV enable to boolean)
     ev_available = data.iloc[i, 4]  # Column 4 (EV availability)
     ev_distance_param = data.iloc[i, 5]  # Column 5 (EV distance)
-    # bat_enable = bool(data.iloc[i, 9])  # Column 9 (Convert battery enable to boolean)
-    bat_enable = bool(data.iloc[i, 9])
+    bat_enable = bool(data.iloc[i, 9])  # Column 9 (Convert battery enable to boolean)
     ev_capacity = data.iloc[i, 10]  # Column 10 (EV capacity)
     ev_consumption = data.iloc[i, 11]  # Column 11 (EV consumption)
     heat_enable = bool(data.iloc[i, 12])  # Column 12 (Convert heat enable to boolean)
@@ -40,22 +33,23 @@ for i in range(len(data)):  # Use len(data) to include all rows
     water_technology = data.iloc[i, 24]  # Column 20 (Water technology)
     heat_capacity = data.iloc[i, 25]  # Column 21 (Heat capacity)
     water_capacity = data.iloc[i, 26]  # Column 22 (Water capacity)
+    name = data.iloc[i, 0]  # Column 0 (Name)
 
     # Run the optimization model with the extracted parameters
     model = iesopt.run(
-        "base_model.iesopt.yaml",
+        "cap_sub.iesopt.yaml",
         parameters={
             "demand": demand,
             "pv_size": pv_size,
-            "pv_enable": pv_enable,  # Ensure this is a boolean
+            "pv_enable": pv_enable,
             "pv_param": pv_param,
-            "ev_enable": ev_enable,  # Ensure this is a boolean
+            "ev_enable": ev_enable,
             "ev_available": ev_available,
             "ev_distance_param": ev_distance_param,
-            "bat_enable": bat_enable,  # Ensure this is a boolean
+            "bat_enable": bat_enable,
             "ev_capacity": ev_capacity,
             "ev_consumption": ev_consumption,
-            "heat_enable": heat_enable,  # Ensure this is a boolean
+            "heat_enable": heat_enable,
             "q_tot": q_tot,
             "power_to_c": power_to_c,
             "heat_lb": heat_lb,
@@ -66,309 +60,141 @@ for i in range(len(data)):  # Use len(data) to include all rows
             "water_technology": water_technology,
             "heat_capacity": heat_capacity,
             "water_capacity": water_capacity,
+            "name": name
         }
     )
 
-    # Accumulate the objective value
-    total_objective_value += model.objective_value
-
-    # Extract timeseries data for demand, connection_point, and grid_load
-    timeseries_data = model.results.to_pandas(
-        filter=lambda c, t, f: (
-            c in ["demand", "connection_point", "grid_load", "pv_generation", "pv_surplus", "ev_unit", "heat_unit", "water_unit", "pv_surplus"]  # expensive_load, charger
-            and t == "exp"  # Ensure fieldtype is "exp"
-        ),
-        orientation="wide"
-    )
-
-    # Flatten multi-index into single column names if necessary
-    if isinstance(timeseries_data.columns, pd.MultiIndex):
-        single_column_index = ['_'.join(col).strip() for col in timeseries_data.columns.to_flat_index()]
-        timeseries_data.columns = single_column_index
-
-    # Rename columns to include the component name and row index (keep lowercase)
-    timeseries_data.columns = [f"{col}_{i+1}" for col in timeseries_data.columns]
-
-    # Sort columns alphabetically
-    timeseries_data = timeseries_data.sort_index(axis=1)
-
-    # Add the data as new columns to the combined DataFrame
-    combined_timeseries = pd.concat([combined_timeseries, timeseries_data], axis=1)
-
     print("-" * 50)
     print(f"Household count: {i + 1}")
+#****************************************************************************************************************
+# # Extract time series data
+# timeseries_data = model.results.to_pandas(
+#     filter=lambda c, t, f: (
+#         c in [
+#             "demand", "connection_point", "el_market", 
+#             "pv_generation", "pv_surplus", "ev_unit", 
+#             "heat_unit", "water_unit"
+#         ]
+#         and t == "exp"
+#     ),
+#     orientation="wide"
+# )
 
-# Combine data by calculating row-wise sums for specific components
-demand_sum = combined_timeseries.filter(like="demand_exp_value").sum(axis=1)
-grid_load_sum = combined_timeseries.filter(like="grid_load_exp_value").sum(axis=1)
-connection_point_sum = combined_timeseries.filter(like="connection_point_exp_value").sum(axis=1)
-pv_sum = combined_timeseries.filter(like="pv_generation_exp_value").sum(axis=1)
-ev_unit = combined_timeseries.filter(like="ev_unit_exp_out_electricity").sum(axis=1)
-heat_unit = combined_timeseries.filter(like="heat_unit_exp_in_electricity").sum(axis=1)
-water_unit = combined_timeseries.filter(like="water_unit_exp_in_electricity").sum(axis=1)
-pv_surplus = combined_timeseries.filter(like="pv_surplus_exp_value").sum(axis=1)
-# expensive_load_sum = combined_timeseries.filter(like="expensive_load_exp_value").sum(axis=1)
+# timeseries_data_var = model.results.to_pandas(
+#     filter=lambda c, t, f: (
+#         c in [
+#             "bat_charge", "bat_discharge",
+#         ]
+#         and t == "var"
+#     ),
+#     orientation="wide"
+# )
 
-# Calculate additional time series
-space_heating_cum = demand_sum + heat_unit  # Sum of demand_sum and heat_unit
-dhw_cum = space_heating_cum + water_unit  # Sum of space_heating_cum and water_unit
-ev_cum = dhw_cum + ev_unit  # Sum of dhw_cum and ev_unit
-surplus = pv_surplus * (-1)  # Invert the surplus value
-### for net load on low-voltage grid depiction
-net_load_lv_grid = grid_load_sum - pv_surplus # Calculate net load on the low-voltage grid
-net_load_lv_grid_abs = net_load_lv_grid.abs()  # Calculate absolute value of net load on low-voltage grid
+# # Flatten multi-index into single column names if necessary for both DataFrames
+# for df in [timeseries_data, timeseries_data_var]:
+#     if isinstance(df.columns, pd.MultiIndex):
+#         single_column_index = ['_'.join(col).strip() for col in df.columns.to_flat_index()]
+#         df.columns = single_column_index
 
-# Add the calculated sums as new columns at the beginning of the DataFrame
-combined_timeseries.insert(0, "demand", demand_sum)
-combined_timeseries.insert(1, "grid_load", grid_load_sum)
-combined_timeseries.insert(2, "connection_point", connection_point_sum)
-combined_timeseries.insert(3, "pv_generation", pv_sum)
-combined_timeseries.insert(4, "ev_unit", ev_unit)
-combined_timeseries.insert(5, "heat_unit", heat_unit)
-combined_timeseries.insert(6, "water_unit", water_unit)
-# combined_timeseries.insert(6, "expensive_load", expensive_load_sum)
-combined_timeseries.insert(7, "space_heating_cum", space_heating_cum)  # Add space_heating_cum
-combined_timeseries.insert(8, "dhw_cum", dhw_cum)  # Add dhw_cum
-combined_timeseries.insert(9, "ev_cum", ev_cum)  # Add ev_cum
-combined_timeseries.insert(10, "pv_surplus", surplus)  # Add surplus
-combined_timeseries.insert(11, "net_load_lv_grid", net_load_lv_grid)  # Add net load on low-voltage grid # Add net load on low-voltage grid
-combined_timeseries.insert(12, "net_load_lv_grid_abs", net_load_lv_grid_abs)  # Add absolute value of net load on low-voltage grid
+# # # Rename columns to include the component name and row index (keep lowercase)
+# # timeseries_data.columns = [f"{col}_{i}" for col in timeseries_data.columns]
+# # timeseries_data_var.columns = [f"{col}_{i}" for col in timeseries_data_var.columns]
 
-# Save the updated combined timeseries data to a CSV file
-timeseries_output_file = f'results\\timeseries_{run_name}.csv'
-combined_timeseries.to_csv(timeseries_output_file, index=False)
+# # Combine the two DataFrames horizontally (add timeseries_data_var as additional columns)
+# combined_timeseries_data = pd.concat([timeseries_data, timeseries_data_var], axis=1)
 
-print("-" * 50)
-print(model.results._components)  # Get list of components in model
-print(f"Timeseries data saved to {timeseries_output_file}")
-print(f"Total objective value: {total_objective_value}")
+# # Sort combined columns alphabetically
+# combined_timeseries_data = combined_timeseries_data.sort_index(axis=1)
+# combined_timeseries_data.to_csv('df_debug_household.csv', index=False)
+# #*****************************************************************************************************************
+# #combined graph with all powers
+# import plotly.graph_objects as go
 
-# ******************************************************************************************************************************************
-max_load = round(combined_timeseries['net_load_lv_grid'].max(), 2)
-min_load = round(combined_timeseries['net_load_lv_grid'].min(), 2)
-median_load = round(combined_timeseries['net_load_lv_grid'].median(), 2)
-integral = int(combined_timeseries['net_load_lv_grid_abs'].sum() / 4)  # Integral of net load
-first_quantile = round(combined_timeseries['net_load_lv_grid_abs'].quantile(0.25), 2)
-third_quantile = round(combined_timeseries['net_load_lv_grid_abs'].quantile(0.75), 2)
-total_load = int(combined_timeseries['net_load_lv_grid_abs'].sum() / 4)
-total_objective_value = total_objective_value
+# # Create the figure
+# fig = go.Figure()
 
-# Aggregated variability metrics
-columns_of_interest = [col for col in combined_timeseries.columns if col.startswith('grid_load_exp_value_')]
-data = combined_timeseries[columns_of_interest]
-global_mean = data.values.mean()
-global_std = round(data.values.std(), 2)
-mean_values = data.mean(axis=0)
-std_deviation = data.std(axis=0)
-cv = (std_deviation / mean_values) * 100
-weighted_cv = round((cv * mean_values).sum() / mean_values.sum(),2)
-average_load_curve = data.mean(axis=1)
-absolute_deviation = round(data.sub(average_load_curve, axis=0).abs().values.mean(),2)
-absolute_global_deviation = np.abs(data.values - global_mean).mean()
-load_variability_index = round((absolute_global_deviation / global_mean) * 100,2)
+# # Add demand with light orange fill
+# fig.add_trace(go.Scatter(
+#     x=combined_timeseries_data.index, y=combined_timeseries_data['demand_exp_value'],
+#     mode='lines', name='Demand', line=dict(color='orange'),
+#     fill='tozeroy', fillcolor='rgba(255, 165, 0, 0.3)', stackgroup='one'
+# ))
 
-#Complementary cumulative distribution function # load duration curve
-# Sort the 'net_load_lv_grid_abs' column in descending order
-sorted_grid_load = combined_timeseries['net_load_lv_grid_abs'].sort_values(ascending=False).reset_index(drop=True)
-# Calculate thresholds for 5% and 80% based on sorted values
-x_5_percent = int(0.05 * len(sorted_grid_load))
-x_80_percent = int(0.80 * len(sorted_grid_load))
-# Split the load values into lower (base) and upper (peak) segments
-total_load_values = sorted_grid_load.sum()
-lower_load_values = sorted_grid_load.iloc[x_80_percent:].sum()  # Values from 80% onwards (base load)
-upper_load_values = sorted_grid_load.iloc[:x_5_percent].sum()  # Values up to 5% (peak load)
-# Calculate Base Load (%) and Peak Load (%)
-base_load_percentage = round((lower_load_values / total_load_values) * 100,2)
-peak_load_percentage = round((upper_load_values / total_load_values) * 100,2)
+# # Add space heating with reddish-orange fill
+# fig.add_trace(go.Scatter(
+#     x=combined_timeseries_data.index, y=combined_timeseries_data['heat_unit_exp_in_electricity'],
+#     mode='lines', name='Space heating', line=dict(color='violet'),
+#     fill='tonexty', fillcolor='rgba(138, 43, 226, 0.3)', stackgroup='one'
+# ))
 
-# Create a single DataFrame with all metrics
-df_single_values = pd.DataFrame({
-    'snapshot': [
-        'Descriptive Statistics',  # Header
-        'Objective value', 'Max Load', 'Min Load', 'Median load', 'First quantile', 'Third quantile', 'Total consumed energy', 'Global standard deviation', 'Aggregate coefficient of variation', 
-        'Mean absolute deviation', 'Load variability index', 'Base load (%)', 'Peak load (%)'
-    ],
-    'value': [
-        None,  # Empty value for the header
-        total_objective_value, max_load, min_load, median_load, first_quantile, third_quantile, integral,
-        global_std, weighted_cv, absolute_deviation, load_variability_index, base_load_percentage, peak_load_percentage
-    ]
-})
+# # Add domestic hot water with violet fill
+# fig.add_trace(go.Scatter(
+#     x=combined_timeseries_data.index, y=combined_timeseries_data['water_unit_exp_in_electricity'],
+#     mode='lines', name='DHW', line=dict(color='purple'),
+#     fill='tonexty', fillcolor='rgba(255, 99, 71, 0.3)', stackgroup='one'
+# ))
 
-# Save the updated DataFrame to a CSV file
-results_file_path = f'results\\single_value_{run_name}.csv'
-df_single_values.to_csv(results_file_path, index=False)
+# # Add EV charging with red fill
+# fig.add_trace(go.Scatter(
+#     x=combined_timeseries_data.index, y=combined_timeseries_data['ev_unit_exp_out_electricity'],
+#     mode='lines', name='BEV charging', line=dict(color='red'),
+#     fill='tonexty', fillcolor='rgba(220, 20, 60, 0.3)', stackgroup='one'
+# ))
 
-print(f"Single value metrics saved to {results_file_path}")
+# # # Add BESS charging
+# # fig.add_trace(go.Scatter(
+# #     x=combined_timeseries_data.index, y=combined_timeseries_data["bat_charge_var_flow"],
+# #     mode="none", name="BESS charging",
+# #     fill="tonexty",  fillcolor="rgba(173, 216, 230, 0.3)",  # Light blue with 30% opacity
+# #     fillpattern=dict(shape="."), stackgroup='one'
+# # ))
 
-# ******************************************************************************************************************************************
-#sensitivity analysis threshold: arithmetic mean of the twelve monthly peak
-# Ensure the DataFrame index is numeric
-data = combined_timeseries[columns_of_interest]
-data.reset_index(drop=True, inplace=True)  # Reset index to make it numeric
+# # # Add BESS discharging
+# # fig.add_trace(go.Scatter(
+# #     x=combined_timeseries_data.index, y=combined_timeseries_data["bat_discharge_var_flow"],
+# #     mode="none", name="BESS discharging",
+# #     fill="tonexty", fillcolor="rgba(144, 238, 144, 0.3)",  # Light green with 30% opacity
+# #     fillpattern=dict(shape="x"), stackgroup='one'  # Correct way to add a pattern
+# # ))
 
-# Group by every 2,920 rows and calculate the max for each group
-sensitivity_df = data.groupby(data.index // 2920).max()
+# # # Add PV generation with yellow fill for Schnittmenge
+# # fig.add_trace(go.Scatter(
+# #     x=combined_timeseries_data.index, y=combined_timeseries_data['pv_generation_exp_value'],
+# #     mode='lines', name='PV generation',
+# #     fill='tozeroy', fillcolor='rgba(255, 255, 0, 0.3)',
+# #     line=dict(color='yellow')
+# # ))
 
-# Reset the index for the output (optional)
-sensitivity_df.reset_index(drop=True, inplace=True)
+# # Add net load on low-voltage grid with a finer dashed line
+# fig.add_trace(go.Scatter(
+#     x=combined_timeseries_data.index, y=combined_timeseries_data['el_market_exp_value'],
+#     mode='lines', name='Net load',
+#     line=dict(color='blue', dash='dot')  # Change 'dash' to 'dot' or another style
+# ))
 
-# Step 1: Calculate the mean for each column
-column_means = data.mean()
+# # Customize the layout of the plot
+# fig.update_layout(
+#     title='Load summary',
+#     xaxis_title='15-minute intervals',
+#     yaxis_title='Power in kW',
+#     template='plotly_white',
+#     legend_title='Legend'
+# )
 
-# Step 2: Calculate the arithmetic mean of the monthly peaks for each column
-monthly_groups = data.groupby(data.index // (2920 // 12))  # Assuming ~2920 rows per year
-monthly_peaks = monthly_groups.max()  # Get peaks for each month
+#  # Save the interactive plot as an HTML file
+# html_file_path = f'a_load_summary.html'
+# fig.write_html(html_file_path)
 
-# Calculate the arithmetic mean of the twelve monthly peaks for each column
-monthly_peak_means = monthly_peaks.mean()
+# print(f"Plot for load summary saved as HTML at {html_file_path}")
+# #****************************************************************************************************************
+# # # check for whole dataset
+# # import iesopt
+# # import pandas as pd
 
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
+# # # Load the household results
+# # # Convert to pandas DataFrame and save as CSV
+# # df_household = model.results.to_pandas(orientation='wide')
+# # df_household.to_csv('debug_household.csv', index=False)
 
-selected_means = monthly_peak_means.iloc[:20]  # Select grid_load_exp_value_1 to grid_load_exp_value_20
-fig = make_subplots(rows=1, cols=2, subplot_titles=["All means", "FCG1"])
-fig.add_trace(go.Box(y=monthly_peak_means, boxpoints='all', jitter=0.3, pointpos=0, marker=dict(color='red'), name='All means'), row=1, col=1)
-fig.add_trace(go.Box(y=selected_means, boxpoints='all', jitter=0.3, pointpos=0, marker=dict(color='blue'), name='FCG1'), row=1, col=2)
-fig.update_layout(title="Comparison of monthly peak means", xaxis_title="Columns", yaxis_title="Arithmetic mean of monthly peaks", template="plotly_white", showlegend=False)
-html_file_path = f'results\\boxplot_monthly_peak_means_{run_name}.html'
-fig.write_html(html_file_path)
-
-print(f"Boxplot has been saved as 'boxplot_monthly_peak_means_{run_name}.html'")
-
-# ******************************************************************************************************************************************
-#net grid_load graph
-import plotly.graph_objects as go
-    # Create the plot for 'net_load_lv_grid'
-fig = go.Figure()
-
-# Add 'net_load_lv_grid' data to the plot
-fig.add_trace(go.Scatter(
-    x=combined_timeseries.index, 
-    y=combined_timeseries['net_load_lv_grid'], 
-    mode='lines', 
-    name='Net load on low-voltage grid', 
-    line=dict(color='red')
-))
-
-# Add metrics as annotations
-metrics_text = (
-    f"Max Load: {max_load:.2f} kW<br>"
-    f"Min Load: {min_load:.2f} kW<br>"
-    f"Integral: {integral:.2f} kWh"
-)
-fig.add_annotation(
-    text=metrics_text, xref="paper", yref="paper", x=1, y=1, showarrow=False, align="left", font=dict(size=12, color="black"), bgcolor="lightyellow", bordercolor="black")
-
-# Customize the layout of the plot
-fig.update_layout(
-    title='Net load LV grid',
-    xaxis_title='15-minute intervals',
-    yaxis_title='Power in kW',
-    template='plotly_white',
-    legend_title='Legend'
-)
-
-# Save the interactive plot as an HTML file
-html_file_path = f'results\\net_load_{run_name}.html'
-fig.write_html(html_file_path)
-
-print(f"Plot for net load on low-voltage grid saved as HTML at {html_file_path}")
-
-
-#******************************************************************************************************************************************
-#combined graph with all powers
-import plotly.graph_objects as go
-
-# Create the figure
-fig = go.Figure()
-
-# Add 'grid_load' data to the plot
-if 'grid_load' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['grid_load'], mode='lines', name='Grid load', line=dict(color='red')))
-
-# Add 'demand' data to the plot
-if 'demand' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['demand'], mode='lines', name='Demand', line=dict(color='purple')))
-
-# Add 'pv' data to the plot if it exists
-if 'pv_generation' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['pv_generation'], mode='lines', name='PV', line=dict(color='yellow')))
-
-# Add 'ev-charger' data to the plot if it exists
-if 'ev_cum' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['ev_cum'], mode='lines', name='EV charger', line=dict(color='green')))
-
-# add heat_unit data to the plot if it exists
-if 'space_heating_cum' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['space_heating_cum'], mode='lines', name='Space heating', line=dict(color='orange')))
-
-# add water_unit data to the plot if it exists
-if 'dhw_cum' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['dhw_cum'], mode='lines', name='Domestic hot water', line=dict(color='blue')))
-
-# add net_load_lv_grid data to the plot if it exists
-if 'net_load_lv_grid' in combined_timeseries.columns:
-    fig.add_trace(go.Scatter(x=combined_timeseries.index, y=combined_timeseries['net_load_lv_grid'], mode='lines', name='Net load on low-voltage grid', line=dict(color='black')))
-
-# Customize the layout of the plot
-fig.update_layout(
-    title='Load summary',
-    xaxis_title='15-minute intervals',
-    yaxis_title='Power in kW',
-    template='plotly_white',
-    legend_title='Legend'
-)
-
- # Save the interactive plot as an HTML file
-html_file_path = f'results\\load_summary_{run_name}.html'
-fig.write_html(html_file_path)
-
-print(f"Plot for load summary saved as HTML at {html_file_path}")
-
-#******************************************************************************************************************************************
-#LDC load duration curve
-import plotly.graph_objects as go
-
-# Create a new figure for the Load Duration Curve (LDC)
-fig_ldc = go.Figure()
-
-# Sort the 'grid_load' column in descending order for LDC
-if 'net_load_lv_grid_abs' in combined_timeseries.columns:
-    sorted_grid_load = combined_timeseries['net_load_lv_grid_abs'].sort_values(ascending=False).reset_index(drop=True)
-    fig_ldc.add_trace(go.Scatter(x=sorted_grid_load.index, y=sorted_grid_load, mode='lines', name='Load Duration Curve', line=dict(color='black')
-    ))
-
-# Add vertical lines for 5% and 80% of the x-axis
-x_5_percent = int(0.05 * len(sorted_grid_load))
-x_80_percent = int(0.80 * len(sorted_grid_load))
-
-fig_ldc.add_shape(type="line", x0=x_5_percent, y0=sorted_grid_load.min(), x1=x_5_percent, y1=sorted_grid_load.max(), line=dict(color="blue", dash="dash")
-)
-fig_ldc.add_shape(type="line", x0=x_80_percent, y0=sorted_grid_load.min(), x1=x_80_percent, y1=sorted_grid_load.max(), line=dict(color="blue", dash="dash")
-)
-
-# Add annotations for circled numbers
-max_load = sorted_grid_load.max()
-fig_ldc.add_trace(go.Scatter(
-    x=[int(0.025 * len(sorted_grid_load)), int(0.45 * len(sorted_grid_load)), int(0.85 * len(sorted_grid_load))],
-    y=[max_load * 0.8, max_load * 0.8, max_load * 0.8], mode='text', text=['①', '②', '③'], textfont=dict(size=30, color='black', family='Arial Black'), showlegend=False
-))
-
-# Add metrics annotation at the top-right corner
-metrics_text = "1: Peak<br>2: Intermediate<br>3: Base"
-fig_ldc.add_annotation(text=metrics_text, xref="paper", yref="paper", x=1, y=1, showarrow=False, align="left", font=dict(size=18, color="black"), bgcolor="lightyellow", bordercolor="black"
-)
-
-# Customize the layout for the LDC plot
-fig_ldc.update_layout(
-    title='Load Duration Curve', xaxis_title='Sorted Time Intervals (Highest to Lowest)', yaxis_title='Grid Load (kW)', template='plotly_white', showlegend=False  # Legend completely removed
-)
-
-# Save the Load Duration Curve as an HTML file
-html_file_path_ldc = f'results\\load_duration_curve_{run_name}.html'
-fig_ldc.write_html(html_file_path_ldc)
-
-print(f"Load Duration Curve saved as HTML at {html_file_path_ldc}")
-
-#******************************************************************************************************************************************
+# # print("CSV file has been saved successfully!")
+# #****************************************************************************************************************

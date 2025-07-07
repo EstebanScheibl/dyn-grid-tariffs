@@ -1,0 +1,35 @@
+┌ Info: IESopt.jl (core)  |  2021-now © AIT Austrian Institute of Technology GmbH
+│   authors = Stefan Strömer, Daniel Schwabeneder, and contributors
+│   version = 2.6.1
+│   top_level_config = my_first_model.iesopt.yaml
+│   path = C:\Users\ScheiblS\Documents\Repositories\dyn-grid-tariffs\
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\parser.jl:17
+┌ Info: [parse] Flatten model into base core components
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\parser.jl:190
+┌ Info: [parse] Finished flattening model (disabled 0 components)
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\parser.jl:222
+┌ Info: [parse] Creating and parameterizing 8 core components
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\parser.jl:226
+┌ Info: [parse] Successfully created a total of 8 core components
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\parser.jl:71
+┌ Info: [generate] YAML file validation was done; pass `skip_validation = true` to save some time
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:278
+┌ Info: [generate > attach] Attaching solver `highs` to model
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:347
+┌ Info: [build > prepare] Run pre-processing checks & initializations
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:149
+┌ Info: [build] Begin creating JuMP formulation from components
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:21
+┌ Info: [build] Construct and build objective expression `total_cost`
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:109
+┌ Info: [build] Model successfully built
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:534
+┌ Info: [optimize] Passing model to solver
+│   solver_log_file = C:\Users\ScheiblS\Documents\Repositories\dyn-grid-tariffs\out\my_model\my_scenario.highs.log
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:727
+┌ Info: [optimize] Finished optimizing, solution optimal
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\IESopt.jl:748
+┌ Info: [optimize > results > JLD2] Begin extracting results
+└ @ IESopt.ResultsJLD2 C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\results\jld2\extract.jl:31
+┌ Info: [optimize > results] Finished result handling
+└ @ IESopt C:\Users\ScheiblS\.julia\packages\IESopt\NPuB0\src\results\results.jl:78
